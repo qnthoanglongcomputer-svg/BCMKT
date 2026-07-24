@@ -4,13 +4,13 @@ import { forecastPeriod } from '@/server/kpi/forecast'
 import { daysBetweenInclusive } from '@/server/kpi/period'
 import { monthBounds } from './overview'
 import type { MetricDirection } from '@/server/kpi/types'
+import { isDepartmentInScope, type Scope } from '@/server/auth/scope'
 
 /**
  * Dữ liệu cho dashboard của một bộ phận.
  *
- * ⚠️ CHƯA ÁP resolveScope — module xác thực (workflow 01) chưa được xây.
- * Khi làm xong 01, hàm phải nhận `scope` và chặn truy cập bộ phận ngoài phạm vi
- * bằng cách trả null (để route trả 404, không phải 403 — không tiết lộ bộ phận tồn tại).
+ * Bộ phận ngoài phạm vi → trả `null`, để route trả **404 chứ không phải 403**:
+ * trả 403 là tiết lộ rằng bộ phận đó có tồn tại trong hệ thống.
  */
 
 export interface MetricRow {
@@ -88,12 +88,20 @@ function toNumber(value: Decimal | null | undefined): number | null {
 export async function getDepartmentDashboard(
   departmentCode: string,
   today: Date,
+  scope: Scope,
 ): Promise<DepartmentDashboardData | null> {
   const department = await prisma.department.findFirst({
     where: { code: departmentCode, deletedAt: null },
     select: { id: true, code: true, name: true },
   })
   if (!department) return null
+
+  // Ngoài phạm vi → coi như không tồn tại. Không phân biệt "không có quyền" với
+  // "không tồn tại", để người dùng không dò được cơ cấu tổ chức.
+  if (!isDepartmentInScope(scope, department.id)) return null
+
+  // EMPLOYEE chỉ xem KPI cá nhân, không xem tổng hợp cả bộ phận.
+  if (scope.userIds !== null) return null
 
   const { start, end } = monthBounds(today)
   const prevStart = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() - 1, 1))

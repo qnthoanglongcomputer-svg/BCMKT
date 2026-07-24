@@ -1,11 +1,16 @@
 import Link from 'next/link'
+import { notFound } from 'next/navigation'
 import { getWeightFormOptions } from '@/server/kpi/weight-service'
 import { WeightGroupForm } from '@/components/kpi/WeightGroupForm'
 import { PageHeader } from '@/components/ui/primitives'
+import { requireScope } from '@/server/auth/guard'
 
 export const dynamic = 'force-dynamic'
 
 export default async function NewWeightGroupPage() {
+  const { scope } = await requireScope()
+  if (!scope.canManageKpi) notFound()
+
   const options = await getWeightFormOptions()
 
   return (

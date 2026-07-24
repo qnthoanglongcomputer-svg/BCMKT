@@ -4,13 +4,15 @@ import { DEPARTMENT_CODES } from '@/lib/departments'
 import { forecastPeriod } from '@/server/kpi/forecast'
 import { daysBetweenInclusive } from '@/server/kpi/period'
 import type { MetricDirection } from '@/server/kpi/types'
+import type { Scope, SessionUser } from '@/server/auth/scope'
 
 /**
  * Dữ liệu cho dashboard tổng quan.
  *
- * ⚠️ CHƯA ÁP resolveScope — module xác thực (workflow 01) chưa được xây.
- * Khi làm xong 01, mọi truy vấn ở đây PHẢI nhận `scope` và áp vào `where`.
- * Xem .claude/workflows/01-auth-phan-quyen.md
+ * Phạm vi dữ liệu do `scope` quyết định:
+ *   - Không thấy phòng Marketing (EMPLOYEE, hoặc LEADER bộ phận con) → hiển thị
+ *     dữ liệu của phòng ban gần nhất trong phạm vi, không phải toàn phòng.
+ *   - Khối so sánh bộ phận chỉ liệt kê bộ phận nằm trong phạm vi.
  */
 
 /** 6 chỉ số chính trên hàng tile đầu, theo bố cục trong đặc tả mục 25. */
@@ -90,7 +92,11 @@ function previousMonthBounds(start: Date): { start: Date; end: Date } {
   return monthBounds(prev)
 }
 
-export async function getOverview(today: Date): Promise<OverviewData> {
+export async function getOverview(
+  today: Date,
+  user: SessionUser,
+  scope: Scope,
+): Promise<OverviewData> {
   const { start, end } = monthBounds(today)
   const prev = previousMonthBounds(start)
 
@@ -98,12 +104,8 @@ export async function getOverview(today: Date): Promise<OverviewData> {
   // Ngày hôm nay tính là đã qua — báo cáo trong ngày vẫn đang được nhập.
   const elapsedDays = Math.min(daysBetweenInclusive(start, today), totalDays)
 
-  const marketing = await prisma.department.findUnique({
-    where: { code: DEPARTMENT_CODES.MARKETING },
-    select: { id: true },
-  })
-
-  if (!marketing) {
+  const owner = await resolveOwner(user, scope)
+  if (!owner) {
     return emptyOverview(start, end, totalDays, elapsedDays)
   }
 
@@ -113,7 +115,7 @@ export async function getOverview(today: Date): Promise<OverviewData> {
   })
   const definitionIds = definitions.map((d) => d.id)
 
-  const ownerFilter = { ownerType: 'DEPARTMENT' as const, ownerId: marketing.id }
+  const ownerFilter = { ownerType: owner.ownerType, ownerId: owner.ownerId }
 
   // Ngày cuối cùng đã có dữ liệu, dùng làm mốc tính mục tiêu luỹ kế.
   const lastElapsedDay = new Date(start.getTime() + (elapsedDays - 1) * 86_400_000)
@@ -162,7 +164,7 @@ export async function getOverview(today: Date): Promise<OverviewData> {
       select: { periodStart: true, targetValue: true },
       orderBy: { periodStart: 'asc' },
     }),
-    getDepartmentPerformance(start),
+    getDepartmentPerformance(start, owner, scope),
   ])
 
   const targetByDef = new Map(targets.map((t) => [t.kpiDefinitionId, t.targetValue]))
@@ -284,15 +286,21 @@ function buildForecast(
   }
 }
 
-async function getDepartmentPerformance(periodStart: Date): Promise<DepartmentPerformance[]> {
-  const marketing = await prisma.department.findUnique({
-    where: { code: DEPARTMENT_CODES.MARKETING },
-    select: { id: true },
-  })
-  if (!marketing) return []
+async function getDepartmentPerformance(
+  periodStart: Date,
+  owner: DashboardOwner,
+  scope: Scope,
+): Promise<DepartmentPerformance[]> {
+  // EMPLOYEE không được so sánh giữa các bộ phận — họ chỉ thấy dữ liệu cá nhân.
+  if (owner.ownerType === 'EMPLOYEE') return []
 
   const departments = await prisma.department.findMany({
-    where: { parentId: marketing.id, deletedAt: null },
+    where: {
+      parentId: owner.ownerId,
+      deletedAt: null,
+      // Chỉ liệt kê bộ phận nằm trong phạm vi cho phép.
+      ...(scope.departmentIds === null ? {} : { id: { in: scope.departmentIds } }),
+    },
     select: { id: true, code: true, name: true },
     orderBy: { sortOrder: 'asc' },
   })
@@ -319,6 +327,46 @@ async function getDepartmentPerformance(periodStart: Date): Promise<DepartmentPe
       }
     })
     .sort((a, b) => (b.score ?? -1) - (a.score ?? -1))
+}
+
+interface DashboardOwner {
+  ownerType: 'DEPARTMENT' | 'EMPLOYEE'
+  ownerId: string
+}
+
+/**
+ * Đối tượng mà dashboard tổng quan hiển thị dữ liệu.
+ *
+ * - `EMPLOYEE` → **chính họ**, không phải phòng ban của họ. Đặc tả mục 20:
+ *   "Nhân viên chỉ xem KPI cá nhân". Trả về phòng ban ở đây là rò rỉ dữ liệu
+ *   của cả bộ phận cho một nhân viên.
+ * - Vai trò khác → phòng Marketing nếu trong phạm vi, ngược lại là phòng ban
+ *   cao nhất họ được xem (Leader bộ phận con thấy bộ phận mình).
+ */
+async function resolveOwner(user: SessionUser, scope: Scope): Promise<DashboardOwner | null> {
+  if (scope.userIds !== null) {
+    return { ownerType: 'EMPLOYEE', ownerId: user.id }
+  }
+
+  const marketing = await prisma.department.findUnique({
+    where: { code: DEPARTMENT_CODES.MARKETING },
+    select: { id: true },
+  })
+
+  if (scope.departmentIds === null) {
+    return marketing ? { ownerType: 'DEPARTMENT', ownerId: marketing.id } : null
+  }
+  if (marketing && scope.departmentIds.includes(marketing.id)) {
+    return { ownerType: 'DEPARTMENT', ownerId: marketing.id }
+  }
+  if (scope.departmentIds.length === 0) return null
+
+  const highest = await prisma.department.findFirst({
+    where: { id: { in: scope.departmentIds }, deletedAt: null },
+    select: { id: true },
+    orderBy: [{ level: 'asc' }, { sortOrder: 'asc' }],
+  })
+  return highest ? { ownerType: 'DEPARTMENT', ownerId: highest.id } : null
 }
 
 function emptyOverview(

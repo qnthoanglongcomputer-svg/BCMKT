@@ -6,16 +6,19 @@ import { saveWeightGroup, WeightServiceError } from '@/server/kpi/weight-service
 import { savePlanSchema, saveWeightGroupSchema } from '@/server/kpi/schemas'
 import { AllocationError } from '@/server/kpi/allocation'
 import { ScoringError } from '@/server/kpi/scoring'
+import {
+  ForbiddenError,
+  UnauthorizedError,
+  assertCanManageKpi,
+  assertDepartmentInScope,
+  requireScope,
+} from '@/server/auth/guard'
 
 /**
- * ⚠️ CHƯA KIỂM QUYỀN — module xác thực (workflow 01) chưa được xây.
- * Khi làm xong 01, mọi action ở đây phải:
- *   1. Lấy user từ session (chưa đăng nhập → lỗi)
- *   2. Kiểm vai trò (chỉ ADMIN được sửa KPI)
- *   3. Áp resolveScope để chặn sửa KPI ngoài phạm vi
- * Hiện tại actorId = null nghĩa là "hệ thống" trong audit log.
+ * Mọi action ở đây theo đúng thứ tự: lấy user từ session → kiểm quyền → validate
+ * → áp scope → gọi service → trả kết quả. **Không tin bất cứ thứ gì từ client**,
+ * kể cả `ownerId` — nó luôn được kiểm lại với phạm vi của người đang đăng nhập.
  */
-const ACTOR_ID: string | null = null
 
 export interface ActionResult<T = unknown> {
   ok: boolean
@@ -28,6 +31,9 @@ export interface ActionResult<T = unknown> {
 
 /** Chuyển lỗi nghiệp vụ thành thông báo hiển thị được, giấu chi tiết kỹ thuật. */
 function toMessage(error: unknown): string {
+  if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
+    return error.message
+  }
   if (
     error instanceof AllocationError ||
     error instanceof ScoringError ||
@@ -47,6 +53,10 @@ export async function previewAllocationAction(raw: unknown): Promise<ActionResul
   }
 
   try {
+    const { scope } = await requireScope()
+    assertCanManageKpi(scope)
+    assertDepartmentInScope(scope, parsed.data.ownerId)
+
     const result = await previewAllocation(parsed.data)
     return {
       ok: true,
@@ -77,9 +87,15 @@ export async function savePlanAction(raw: unknown): Promise<ActionResult<{ planI
   }
 
   try {
-    const result = await savePlan(parsed.data, ACTOR_ID)
+    const { user, scope } = await requireScope()
+    assertCanManageKpi(scope)
+    // Không tin `ownerId` từ client: kiểm lại với phạm vi của người đang đăng nhập.
+    assertDepartmentInScope(scope, parsed.data.ownerId)
+
+    const result = await savePlan(parsed.data, user.id)
     revalidatePath('/kpi')
     revalidatePath('/dashboard')
+    revalidatePath('/performance')
     return { ok: true, data: { planId: result.planId } }
   } catch (error) {
     return { ok: false, error: toMessage(error) }
@@ -93,7 +109,10 @@ export async function saveWeightGroupAction(raw: unknown): Promise<ActionResult>
   }
 
   try {
-    await saveWeightGroup(parsed.data, ACTOR_ID)
+    const { user, scope } = await requireScope()
+    assertCanManageKpi(scope)
+
+    await saveWeightGroup(parsed.data, user.id)
     revalidatePath('/kpi/weights')
     return { ok: true }
   } catch (error) {

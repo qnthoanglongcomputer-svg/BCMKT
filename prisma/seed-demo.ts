@@ -105,6 +105,7 @@ async function main() {
 
   const targetRows: Prisma.KpiTargetCreateManyInput[] = []
   const actualRows: Prisma.KpiActualCreateManyInput[] = []
+  let planCount = 0
 
   for (const owner of owners) {
     // Số nguyên liệu của bộ phận này trong tháng hiện tại, dùng lại để tính metric tỷ lệ.
@@ -121,28 +122,43 @@ async function main() {
         strategy: 'EVEN',
       })
 
+      // Tạo kế hoạch thật để màn hình /kpi có dữ liệu, không chỉ sinh target rời.
+      const plan = await prisma.kpiPlan.create({
+        data: {
+          year: YEAR,
+          ownerType: 'DEPARTMENT',
+          ownerId: owner.id,
+          kpiDefinitionId: def.id,
+          yearTarget: ownerYearTarget.toFixed(2),
+          strategy: 'EVEN',
+        },
+      })
+      planCount++
+
       const base = {
         ownerType: 'DEPARTMENT' as const,
         ownerId: owner.id,
         kpiDefinitionId: def.id,
       }
+      // `planId` chỉ có ở kpi_targets, không có ở kpi_actuals.
+      const targetBase = { ...base, planId: plan.id }
 
       // Mục tiêu: lưu đủ 4 cấp kỳ để chứng minh bất biến tổng đúng trên DB thật.
       targetRows.push({
-        ...base,
+        ...targetBase,
         periodType: 'YEAR',
         periodStart: allocation.year.start,
         periodEnd: allocation.year.end,
         targetValue: allocation.year.value.toFixed(2),
       })
       for (const q of allocation.quarters) {
-        targetRows.push({ ...base, periodType: 'QUARTER', periodStart: q.start, periodEnd: q.end, targetValue: q.value.toFixed(2) })
+        targetRows.push({ ...targetBase, periodType: 'QUARTER', periodStart: q.start, periodEnd: q.end, targetValue: q.value.toFixed(2) })
       }
       for (const m of allocation.months) {
-        targetRows.push({ ...base, periodType: 'MONTH', periodStart: m.start, periodEnd: m.end, targetValue: m.value.toFixed(2) })
+        targetRows.push({ ...targetBase, periodType: 'MONTH', periodStart: m.start, periodEnd: m.end, targetValue: m.value.toFixed(2) })
       }
       for (const d of allocation.days) {
-        targetRows.push({ ...base, periodType: 'DAY', periodStart: d.start, periodEnd: d.end, targetValue: d.value.toFixed(2) })
+        targetRows.push({ ...targetBase, periodType: 'DAY', periodStart: d.start, periodEnd: d.end, targetValue: d.value.toFixed(2) })
       }
 
       // Thực tế: chỉ sinh cho các ngày đã qua của tháng hiện tại + cả tháng trước.
@@ -206,6 +222,8 @@ async function main() {
     })
   }
 
+  console.log(`  Kế hoạch KPI: ${planCount}`)
+
   await prisma.kpiTarget.createMany({ data: targetRows })
   console.log(`  Mục tiêu KPI: ${targetRows.length} dòng`)
 
@@ -253,6 +271,8 @@ function pushRatio(
 
   const base = { ownerType: 'DEPARTMENT' as const, ownerId, kpiDefinitionId: def.id }
 
+  // Mục tiêu metric tỷ lệ ở dữ liệu mẫu không gắn plan — chỉ cần đủ để dashboard
+  // có số. Kế hoạch thật cho CPA/ROAS tạo qua màn hình /kpi/planning.
   targetRows.push({
     ...base,
     periodType: 'MONTH',

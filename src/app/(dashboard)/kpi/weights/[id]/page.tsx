@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { getWeightFormOptions, getWeightGroup } from '@/server/kpi/weight-service'
 import { WeightGroupForm } from '@/components/kpi/WeightGroupForm'
 import { PageHeader } from '@/components/ui/primitives'
+import { requireScope } from '@/server/auth/guard'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,6 +13,9 @@ export default async function EditWeightGroupPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
+  const { scope } = await requireScope()
+  if (!scope.canManageKpi) notFound()
+
   const [group, options] = await Promise.all([getWeightGroup(id), getWeightFormOptions()])
 
   if (!group) notFound()

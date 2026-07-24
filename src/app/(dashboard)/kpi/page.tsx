@@ -1,7 +1,9 @@
 import Link from 'next/link'
+import { notFound } from 'next/navigation'
 import { listPlans } from '@/server/kpi/plan-service'
 import { Card, EmptyState, ErrorState, PageHeader, buttonClass } from '@/components/ui/primitives'
 import { formatByUnit } from '@/lib/format'
+import { requireScope } from '@/server/auth/guard'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,9 +21,15 @@ export default async function KpiPlanListPage({
   const params = await searchParams
   const year = Number(params.year) || new Date().getUTCFullYear()
 
+  const { user, scope } = await requireScope()
+
+  // Đặc tả mục 20: nhân viên chỉ xem KPI cá nhân, không xem kế hoạch KPI của
+  // bộ phận. Trả 404 thay vì 403 để không tiết lộ màn hình này tồn tại.
+  if (user.role === 'EMPLOYEE') notFound()
+
   let plans: Awaited<ReturnType<typeof listPlans>>
   try {
-    plans = await listPlans(year)
+    plans = await listPlans(year, scope)
   } catch (error) {
     console.error('Không tải được danh sách kế hoạch KPI:', error)
     return (
@@ -39,9 +47,11 @@ export default async function KpiPlanListPage({
         actions={
           <>
             <YearSwitcher year={year} />
-            <Link href="/kpi/planning/new" className={buttonClass('primary')}>
-              Thêm kế hoạch
-            </Link>
+            {scope.canManageKpi ? (
+              <Link href="/kpi/planning/new" className={buttonClass('primary')}>
+                Thêm kế hoạch
+              </Link>
+            ) : null}
           </>
         }
       />
@@ -49,11 +59,17 @@ export default async function KpiPlanListPage({
       {plans.length === 0 ? (
         <EmptyState
           title={`Chưa có kế hoạch KPI nào cho năm ${year}`}
-          description="Tạo kế hoạch đầu tiên để hệ thống sinh mục tiêu cho từng quý, tháng, tuần và ngày. Mọi dashboard đều dựa trên các mục tiêu này."
+          description={
+            scope.canManageKpi
+              ? 'Tạo kế hoạch đầu tiên để hệ thống sinh mục tiêu cho từng quý, tháng, tuần và ngày. Mọi dashboard đều dựa trên các mục tiêu này.'
+              : 'Chưa có kế hoạch KPI nào trong phạm vi của bạn. Liên hệ quản trị viên để thiết lập.'
+          }
           action={
-            <Link href="/kpi/planning/new" className={buttonClass('primary')}>
-              Tạo kế hoạch KPI
-            </Link>
+            scope.canManageKpi ? (
+              <Link href="/kpi/planning/new" className={buttonClass('primary')}>
+                Tạo kế hoạch KPI
+              </Link>
+            ) : null
           }
         />
       ) : (
@@ -121,7 +137,7 @@ export default async function KpiPlanListPage({
                         href={`/kpi/planning/${plan.id}`}
                         className="text-sm text-blue-600 hover:underline dark:text-blue-400"
                       >
-                        Sửa
+                        {scope.canManageKpi ? 'Sửa' : 'Xem'}
                       </Link>
                     </td>
                   </tr>

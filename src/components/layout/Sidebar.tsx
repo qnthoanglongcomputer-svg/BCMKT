@@ -3,52 +3,71 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import clsx from 'clsx'
+import type { Role } from '@/server/auth/scope'
 
 /**
  * Menu chính theo mục 25 đặc tả.
  *
- * `disabled` = chức năng chưa xây. Hiện mờ và không click được, thay vì ẩn đi —
- * để người dùng thấy được lộ trình và không tưởng hệ thống thiếu chức năng.
+ * `roles` giới hạn vai trò nào **nhìn thấy** mục đó. Đây chỉ là trải nghiệm —
+ * bảo mật thật nằm ở guard phía server. Ẩn menu không thay thế được việc kiểm
+ * quyền trong route handler và server action.
  *
- * ⚠️ Chưa lọc theo vai trò. Khi làm xong workflow 01 (auth), menu phải ẩn mục
- * ngoài quyền — nhưng đó chỉ là trải nghiệm, bảo mật vẫn nằm ở server.
+ * `disabled` = chức năng chưa xây. Hiện mờ thay vì ẩn, để thấy được lộ trình.
  */
-const NAV_ITEMS: ReadonlyArray<{ href: string; label: string; icon: string; disabled?: boolean }> = [
-  { href: '/dashboard', label: 'Dashboard', icon: '🏠' },
-  { href: '/kpi', label: 'KPI', icon: '🎯' },
-  { href: '/kpi/weights', label: 'Trọng số KPI', icon: '⚖️' },
-  { href: '/performance', label: 'Performance', icon: '📈' },
-  { href: '/content-social', label: 'Content Social', icon: '📱', disabled: true },
-  { href: '/content-creator', label: 'Content Creator', icon: '🎥', disabled: true },
-  { href: '/designer', label: 'Designer', icon: '🎨', disabled: true },
-  { href: '/editor', label: 'Editor', icon: '🎬', disabled: true },
-  { href: '/trade', label: 'Trade Marketing', icon: '🏪', disabled: true },
-  { href: '/branding', label: 'Branding', icon: '🏷', disabled: true },
-  { href: '/campaigns', label: 'Campaign', icon: '📊', disabled: true },
-  { href: '/hr', label: 'Nhân sự', icon: '👥', disabled: true },
-  { href: '/ai-insight', label: 'AI Insight', icon: '🤖', disabled: true },
-  { href: '/reports', label: 'Báo cáo', icon: '📄', disabled: true },
-  { href: '/notifications', label: 'Thông báo', icon: '🔔', disabled: true },
-  { href: '/admin', label: 'Quản trị', icon: '⚙', disabled: true },
+const ALL_ROLES: readonly Role[] = ['ADMIN', 'MARKETING_MANAGER', 'LEADER', 'EMPLOYEE']
+/** Dashboard bộ phận là dữ liệu tổng hợp — nhân viên chỉ xem KPI cá nhân. */
+const NOT_EMPLOYEE: readonly Role[] = ['ADMIN', 'MARKETING_MANAGER', 'LEADER']
+const KPI_ADMIN: readonly Role[] = ['ADMIN', 'MARKETING_MANAGER']
+
+const NAV_ITEMS: ReadonlyArray<{
+  href: string
+  label: string
+  icon: string
+  roles: readonly Role[]
+  disabled?: boolean
+}> = [
+  { href: '/dashboard', label: 'Dashboard', icon: '🏠', roles: ALL_ROLES },
+  // Leader xem được kế hoạch KPI của subtree mình (đặc tả mục 20: "theo dõi Team"),
+  // nhưng nút thêm/sửa bị ẩn theo `scope.canManageKpi`.
+  { href: '/kpi', label: 'KPI', icon: '🎯', roles: NOT_EMPLOYEE },
+  { href: '/kpi/weights', label: 'Trọng số KPI', icon: '⚖️', roles: KPI_ADMIN },
+  { href: '/performance', label: 'Performance', icon: '📈', roles: NOT_EMPLOYEE },
+  { href: '/content-social', label: 'Content Social', icon: '📱', roles: NOT_EMPLOYEE, disabled: true },
+  { href: '/content-creator', label: 'Content Creator', icon: '🎥', roles: NOT_EMPLOYEE, disabled: true },
+  { href: '/designer', label: 'Designer', icon: '🎨', roles: NOT_EMPLOYEE, disabled: true },
+  { href: '/editor', label: 'Editor', icon: '🎬', roles: NOT_EMPLOYEE, disabled: true },
+  { href: '/trade', label: 'Trade Marketing', icon: '🏪', roles: NOT_EMPLOYEE, disabled: true },
+  { href: '/branding', label: 'Branding', icon: '🏷', roles: NOT_EMPLOYEE, disabled: true },
+  { href: '/campaigns', label: 'Campaign', icon: '📊', roles: ALL_ROLES, disabled: true },
+  { href: '/hr', label: 'Nhân sự', icon: '👥', roles: NOT_EMPLOYEE, disabled: true },
+  { href: '/ai-insight', label: 'AI Insight', icon: '🤖', roles: KPI_ADMIN, disabled: true },
+  { href: '/reports', label: 'Báo cáo', icon: '📄', roles: ALL_ROLES, disabled: true },
+  { href: '/notifications', label: 'Thông báo', icon: '🔔', roles: ALL_ROLES, disabled: true },
+  { href: '/admin', label: 'Quản trị', icon: '⚙', roles: ['ADMIN'], disabled: true },
 ]
 
-export function Sidebar() {
+export function Sidebar({ role }: { role: Role }) {
   const pathname = usePathname()
+  const items = NAV_ITEMS.filter((item) => item.roles.includes(role))
 
   return (
     <nav
       aria-label="Menu chính"
       className="hidden w-56 shrink-0 border-r border-slate-200 bg-white md:block dark:border-slate-800 dark:bg-slate-900"
     >
-      <div className="flex h-14 items-center border-b border-slate-200 px-4 dark:border-slate-800">
+      <div className="flex h-12 items-center border-b border-slate-200 px-4 dark:border-slate-800">
         <span className="text-sm font-semibold tracking-tight text-slate-900 dark:text-slate-100">
           MPMS
         </span>
       </div>
 
       <ul className="space-y-0.5 p-2">
-        {NAV_ITEMS.map((item) => {
-          const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`)
+        {items.map((item) => {
+          // So khớp chính xác để /kpi không sáng khi đang ở /kpi/weights.
+          const isActive =
+            pathname === item.href ||
+            (pathname.startsWith(`${item.href}/`) &&
+              !items.some((other) => other !== item && pathname.startsWith(other.href) && other.href.length > item.href.length))
 
           if (item.disabled) {
             return (

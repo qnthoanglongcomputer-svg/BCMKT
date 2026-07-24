@@ -1,8 +1,10 @@
 import Link from 'next/link'
+import { notFound } from 'next/navigation'
 import Decimal from 'decimal.js'
 import { listWeightGroups } from '@/server/kpi/weight-service'
 import { Card, EmptyState, ErrorState, PageHeader, buttonClass } from '@/components/ui/primitives'
 import { formatPercentValue } from '@/lib/format'
+import { requireScope } from '@/server/auth/guard'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,6 +15,11 @@ export default async function WeightGroupListPage({
 }) {
   const params = await searchParams
   const year = Number(params.year) || new Date().getUTCFullYear()
+
+  const { user, scope } = await requireScope()
+
+  // Trọng số quyết định điểm KPI của nhân sự — chỉ Admin và Trưởng phòng được xem.
+  if (user.role !== 'ADMIN' && user.role !== 'MARKETING_MANAGER') notFound()
 
   let groups: Awaited<ReturnType<typeof listWeightGroups>>
   try {
@@ -32,9 +39,11 @@ export default async function WeightGroupListPage({
         title="Trọng số KPI"
         description={`Năm ${year} · ${groups.length} nhóm. Mỗi vị trí có bộ chỉ số và trọng số riêng để chấm điểm.`}
         actions={
-          <Link href="/kpi/weights/new" className={buttonClass('primary')}>
-            Thêm nhóm
-          </Link>
+          scope.canManageKpi ? (
+            <Link href="/kpi/weights/new" className={buttonClass('primary')}>
+              Thêm nhóm
+            </Link>
+          ) : null
         }
       />
 
@@ -43,9 +52,11 @@ export default async function WeightGroupListPage({
           title={`Chưa có nhóm trọng số nào cho năm ${year}`}
           description="Không có trọng số thì không chấm được điểm KPI. Mỗi vị trí cần một nhóm với tổng trọng số bằng 100%."
           action={
-            <Link href="/kpi/weights/new" className={buttonClass('primary')}>
-              Tạo nhóm trọng số
-            </Link>
+            scope.canManageKpi ? (
+              <Link href="/kpi/weights/new" className={buttonClass('primary')}>
+                Tạo nhóm trọng số
+              </Link>
+            ) : null
           }
         />
       ) : (
@@ -100,7 +111,7 @@ export default async function WeightGroupListPage({
                           href={`/kpi/weights/${group.id}`}
                           className="text-sm text-blue-600 hover:underline dark:text-blue-400"
                         >
-                          Sửa
+                          {scope.canManageKpi ? 'Sửa' : 'Xem'}
                         </Link>
                       </td>
                     </tr>

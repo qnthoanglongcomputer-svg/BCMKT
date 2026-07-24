@@ -1,5 +1,6 @@
 import { Suspense } from 'react'
 import { getOverview } from '@/server/dashboard/overview'
+import { requireScope } from '@/server/auth/guard'
 import { KpiTile } from '@/components/kpi/KpiTile'
 import { StatusBadge } from '@/components/kpi/StatusBadge'
 import { TrendChart } from '@/components/charts/TrendChart'
@@ -28,7 +29,8 @@ async function Overview() {
 
   try {
     // Ngày hiện tại lấy ở biên ngoài rồi truyền vào — hàm nghiệp vụ không tự đọc thời gian.
-    data = await getOverview(new Date())
+    const { user, scope } = await requireScope()
+    data = await getOverview(new Date(), user, scope)
   } catch (error) {
     console.error('Không tải được dashboard tổng quan:', error)
     return <ErrorState />

@@ -200,6 +200,7 @@ model KpiDefinition {
   isActive       Boolean @default(true) @map("is_active")
   sortOrder      Int     @default(0) @map("sort_order")
 
+  plans        KpiPlan[]
   targets      KpiTarget[]
   actuals      KpiActual[]
   weights      KpiWeight[]
@@ -230,9 +231,11 @@ model KpiPlan {
   /// Tỷ trọng từng tháng khi strategy = WEIGHTED: { "1": 0.05, "2": 0.06, ... }
   monthWeights    Json?              @map("month_weights")
   /// Giá trị tháng bị khoá khi strategy = MANUAL: { "12": 8000 }
+  /// Với metric RATIO: 12 giá trị mục tiêu do admin nhập cho từng tháng
   lockedMonths    Json?              @map("locked_months")
 
-  targets KpiTarget[]
+  kpiDefinition KpiDefinition @relation(fields: [kpiDefinitionId], references: [id], onDelete: Restrict)
+  targets       KpiTarget[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

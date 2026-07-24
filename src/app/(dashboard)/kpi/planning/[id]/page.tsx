@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { prisma } from '@/lib/prisma'
 import { getPlan, getPlanFormOptions } from '@/server/kpi/plan-service'
+import { requireScope } from '@/server/auth/guard'
 import { PlanForm } from '@/components/kpi/PlanForm'
 import { PageHeader } from '@/components/ui/primitives'
 
@@ -24,7 +25,11 @@ export default async function EditPlanPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const [plan, options] = await Promise.all([getPlan(id), getPlanFormOptions()])
+  const { scope } = await requireScope()
+  // Không đủ quyền sửa KPI → coi như trang không tồn tại.
+  if (!scope.canManageKpi) notFound()
+
+  const [plan, options] = await Promise.all([getPlan(id, scope), getPlanFormOptions(scope)])
 
   // Chỉ số bị xoá khỏi danh mục thì kế hoạch không còn ý nghĩa để sửa.
   if (!plan || !plan.kpiDefinition) notFound()

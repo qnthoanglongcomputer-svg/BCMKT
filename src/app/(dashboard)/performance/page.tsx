@@ -3,6 +3,7 @@ import { getDepartmentDashboard } from '@/server/dashboard/department'
 import { DepartmentDashboard } from '@/components/kpi/DepartmentDashboard'
 import { ErrorState } from '@/components/ui/primitives'
 import { DEPARTMENT_CODES } from '@/lib/departments'
+import { requireScope } from '@/server/auth/guard'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,7 +12,8 @@ export default async function PerformancePage() {
 
   try {
     // Ngày hiện tại lấy ở biên ngoài rồi truyền vào — hàm nghiệp vụ không tự đọc thời gian.
-    data = await getDepartmentDashboard(DEPARTMENT_CODES.PERFORMANCE, new Date())
+    const { scope } = await requireScope()
+    data = await getDepartmentDashboard(DEPARTMENT_CODES.PERFORMANCE, new Date(), scope)
   } catch (error) {
     console.error('Không tải được dashboard Performance:', error)
     return (

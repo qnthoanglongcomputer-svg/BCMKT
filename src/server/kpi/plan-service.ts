@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { allocateYear } from './allocation'
 import { allocateRatioYear } from './allocation-ratio'
 import { logAudit } from '@/server/audit/log'
+import { isDepartmentInScope, type Scope } from '@/server/auth/scope'
 import type { AllocationResult, AllocationStrategy, OwnerType } from './types'
 import type { SavePlanInput } from './schemas'
 
@@ -217,9 +218,13 @@ export interface PlanListItem {
   hasActuals: boolean
 }
 
-export async function listPlans(year: number): Promise<PlanListItem[]> {
+export async function listPlans(year: number, scope: Scope): Promise<PlanListItem[]> {
   const plans = await prisma.kpiPlan.findMany({
-    where: { year },
+    where: {
+      year,
+      // Chỉ liệt kê kế hoạch của phòng ban trong phạm vi.
+      ...(scope.departmentIds === null ? {} : { ownerId: { in: scope.departmentIds } }),
+    },
     select: {
       id: true,
       year: true,
@@ -274,11 +279,17 @@ export async function listPlans(year: number): Promise<PlanListItem[]> {
   })
 }
 
-/** Dữ liệu để dựng form: danh sách phòng ban và chỉ số đang hoạt động. */
-export async function getPlanFormOptions() {
+/**
+ * Dữ liệu để dựng form. Danh sách phòng ban đã lọc theo phạm vi — người dùng
+ * không chọn được phòng ban họ không có quyền, và server vẫn kiểm lại khi lưu.
+ */
+export async function getPlanFormOptions(scope: Scope) {
   const [departments, definitions] = await Promise.all([
     prisma.department.findMany({
-      where: { deletedAt: null },
+      where: {
+        deletedAt: null,
+        ...(scope.departmentIds === null ? {} : { id: { in: scope.departmentIds } }),
+      },
       select: { id: true, code: true, name: true, level: true },
       orderBy: [{ level: 'asc' }, { sortOrder: 'asc' }],
     }),
@@ -291,7 +302,8 @@ export async function getPlanFormOptions() {
   return { departments, definitions }
 }
 
-export async function getPlan(planId: string) {
+/** Trả `null` khi kế hoạch nằm ngoài phạm vi — route dùng để trả 404. */
+export async function getPlan(planId: string, scope: Scope) {
   const plan = await prisma.kpiPlan.findUnique({
     where: { id: planId },
     select: {
@@ -307,6 +319,7 @@ export async function getPlan(planId: string) {
     },
   })
   if (!plan) return null
+  if (!isDepartmentInScope(scope, plan.ownerId)) return null
 
   const kpiDefinition = await prisma.kpiDefinition.findUnique({
     where: { id: plan.kpiDefinitionId },
