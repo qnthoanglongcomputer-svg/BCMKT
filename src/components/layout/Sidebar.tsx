@@ -15,8 +15,9 @@ import clsx from 'clsx'
  */
 const NAV_ITEMS: ReadonlyArray<{ href: string; label: string; icon: string; disabled?: boolean }> = [
   { href: '/dashboard', label: 'Dashboard', icon: '🏠' },
-  { href: '/kpi', label: 'KPI', icon: '🎯', disabled: true },
-  { href: '/performance', label: 'Performance', icon: '📈', disabled: true },
+  { href: '/kpi', label: 'KPI', icon: '🎯' },
+  { href: '/kpi/weights', label: 'Trọng số KPI', icon: '⚖️' },
+  { href: '/performance', label: 'Performance', icon: '📈' },
   { href: '/content-social', label: 'Content Social', icon: '📱', disabled: true },
   { href: '/content-creator', label: 'Content Creator', icon: '🎥', disabled: true },
   { href: '/designer', label: 'Designer', icon: '🎨', disabled: true },

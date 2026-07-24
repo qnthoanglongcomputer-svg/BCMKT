@@ -1,6 +1,7 @@
 export * from './types'
 export * from './period'
 export * from './allocation'
+export * from './allocation-ratio'
 export * from './rollup'
 export * from './scoring'
 export * from './grading'
