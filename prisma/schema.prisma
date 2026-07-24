@@ -1,0 +1,646 @@
+// MPMS — Marketing Performance Management System
+// Quy ước: tiền Decimal(18,2), tỷ lệ/trọng số Decimal(9,4), số lượng Int. Cấm Float.
+// Mọi bảng nghiệp vụ có created_at/updated_at/created_by/updated_by.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────────────────────
+
+enum Role {
+  ADMIN
+  MARKETING_MANAGER
+  LEADER
+  EMPLOYEE
+}
+
+/// Cấp sở hữu KPI trong cây tổ chức
+enum OwnerType {
+  COMPANY
+  DEPARTMENT
+  TEAM
+  EMPLOYEE
+}
+
+enum PeriodType {
+  YEAR
+  QUARTER
+  MONTH
+  WEEK
+  DAY
+}
+
+/// Chiều tốt/xấu của metric. LOWER_BETTER: CPA, CPC, chi phí, lỗi, trễ deadline.
+enum MetricDirection {
+  HIGHER_BETTER
+  LOWER_BETTER
+}
+
+/// SUM: cộng dồn theo cây. RATIO: tính lại từ tử/mẫu đã cộng dồn (không bao giờ lấy trung bình).
+enum MetricAggregation {
+  SUM
+  RATIO
+}
+
+enum AllocationStrategy {
+  EVEN
+  WEIGHTED
+  MANUAL
+}
+
+enum ReportStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+}
+
+enum AdsPlatform {
+  FACEBOOK
+  GOOGLE
+  TIKTOK
+}
+
+enum SyncStatus {
+  SUCCESS
+  PARTIAL
+  FAILED
+  NEEDS_REAUTH
+}
+
+enum AlertSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  APPROVE
+  REJECT
+  SUBMIT
+  REOPEN
+  EXPORT
+  LOGIN
+}
+
+// ─────────────────────────────────────────────────────────────
+// Tổ chức & nhân sự
+// ─────────────────────────────────────────────────────────────
+
+/// Cây phòng ban tự mở rộng. Thêm phòng ban/team là thao tác dữ liệu, không sửa code.
+model Department {
+  id       String  @id @default(cuid())
+  code     String  @unique
+  name     String
+  parentId String? @map("parent_id")
+  /// 0 = công ty, 1 = phòng Marketing, 2 = bộ phận, 3 = team
+  level    Int     @default(0)
+  sortOrder Int    @default(0) @map("sort_order")
+
+  parent   Department?  @relation("DepartmentTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children Department[] @relation("DepartmentTree")
+
+  users     User[]
+  positions Position[]
+  reports   Report[]
+  weightGroups KpiWeightGroup[]
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  createdBy String?   @map("created_by")
+  updatedBy String?   @map("updated_by")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([parentId])
+  @@index([deletedAt])
+  @@map("departments")
+}
+
+/// Vị trí công việc (Lead Ads, Designer, Editor...). Gắn với phòng ban.
+model Position {
+  id           String @id @default(cuid())
+  code         String @unique
+  name         String
+  departmentId String @map("department_id")
+
+  department   Department      @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  users        User[]
+  weightGroups KpiWeightGroup[]
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  createdBy String?   @map("created_by")
+  updatedBy String?   @map("updated_by")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([departmentId])
+  @@map("positions")
+}
+
+model User {
+  id           String  @id @default(cuid())
+  email        String  @unique
+  passwordHash String  @map("password_hash")
+  fullName     String  @map("full_name")
+  role         Role    @default(EMPLOYEE)
+  departmentId String? @map("department_id")
+  positionId   String? @map("position_id")
+  isActive     Boolean @default(true) @map("is_active")
+
+  department Department? @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  position   Position?   @relation(fields: [positionId], references: [id], onDelete: Restrict)
+
+  reports          Report[]        @relation("ReportAuthor")
+  reviewedReports  Report[]        @relation("ReportReviewer")
+  notifications    Notification[]
+  auditLogs        AuditLog[]
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  createdBy String?   @map("created_by")
+  updatedBy String?   @map("updated_by")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([departmentId])
+  @@index([role])
+  @@index([deletedAt])
+  @@map("users")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Định nghĩa KPI
+// ─────────────────────────────────────────────────────────────
+
+/// Metric là DỮ LIỆU cấu hình, không hardcode trong code.
+model KpiDefinition {
+  id          String            @id @default(cuid())
+  code        String            @unique
+  name        String
+  unit        String
+  direction   MetricDirection   @default(HIGHER_BETTER)
+  aggregation MetricAggregation @default(SUM)
+
+  /// Chỉ dùng khi aggregation = RATIO. Trỏ tới code của metric SUM.
+  numeratorCode   String? @map("numerator_code")
+  denominatorCode String? @map("denominator_code")
+
+  /// Trần achievement khi chấm điểm, mặc định 120%
+  achievementCap Decimal @default("1.2000") @map("achievement_cap") @db.Decimal(9, 4)
+  isActive       Boolean @default(true) @map("is_active")
+  sortOrder      Int     @default(0) @map("sort_order")
+
+  targets      KpiTarget[]
+  actuals      KpiActual[]
+  weights      KpiWeight[]
+  reportDetails ReportDetail[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdBy String?  @map("created_by")
+  updatedBy String?  @map("updated_by")
+
+  @@index([isActive])
+  @@map("kpi_definitions")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Mục tiêu KPI theo kỳ
+// ─────────────────────────────────────────────────────────────
+
+/// Kế hoạch KPI năm do admin nhập một lần. Engine sinh xuống các kỳ con.
+model KpiPlan {
+  id              String             @id @default(cuid())
+  year            Int
+  ownerType       OwnerType          @map("owner_type")
+  ownerId         String             @map("owner_id")
+  kpiDefinitionId String             @map("kpi_definition_id")
+  yearTarget      Decimal            @map("year_target") @db.Decimal(18, 2)
+  strategy        AllocationStrategy @default(EVEN)
+  /// Tỷ trọng từng tháng khi strategy = WEIGHTED: { "1": 0.05, "2": 0.06, ... }
+  monthWeights    Json?              @map("month_weights")
+  /// Giá trị tháng bị khoá khi strategy = MANUAL: { "12": 8000 }
+  lockedMonths    Json?              @map("locked_months")
+
+  targets KpiTarget[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdBy String?  @map("created_by")
+  updatedBy String?  @map("updated_by")
+
+  @@unique([year, ownerType, ownerId, kpiDefinitionId])
+  @@index([year])
+  @@map("kpi_plans")
+}
+
+/// Mục tiêu KPI đã phân bổ xuống từng kỳ. Sinh bởi engine — không sửa tay.
+/// Thay cho kpi_year/quarter/month/week/day trong đặc tả: gộp một bảng, phân biệt bằng periodType.
+model KpiTarget {
+  id              String     @id @default(cuid())
+  planId          String?    @map("plan_id")
+  ownerType       OwnerType  @map("owner_type")
+  ownerId         String     @map("owner_id")
+  kpiDefinitionId String     @map("kpi_definition_id")
+  periodType      PeriodType @map("period_type")
+  periodStart     DateTime   @map("period_start") @db.Date
+  periodEnd       DateTime   @map("period_end") @db.Date
+  targetValue     Decimal    @map("target_value") @db.Decimal(18, 2)
+
+  plan          KpiPlan?      @relation(fields: [planId], references: [id], onDelete: Cascade)
+  kpiDefinition KpiDefinition @relation(fields: [kpiDefinitionId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([ownerType, ownerId, kpiDefinitionId, periodType, periodStart])
+  @@index([ownerType, ownerId, periodType, periodStart])
+  @@index([planId])
+  @@map("kpi_targets")
+}
+
+/// Kết quả thực tế theo kỳ. Cấp DAY là hạt nhân; các cấp trên là vật chất hoá từ rollup.
+model KpiActual {
+  id              String     @id @default(cuid())
+  ownerType       OwnerType  @map("owner_type")
+  ownerId         String     @map("owner_id")
+  kpiDefinitionId String     @map("kpi_definition_id")
+  periodType      PeriodType @map("period_type")
+  periodStart     DateTime   @map("period_start") @db.Date
+  periodEnd       DateTime   @map("period_end") @db.Date
+  actualValue     Decimal    @map("actual_value") @db.Decimal(18, 2)
+  /// Tử/mẫu giữ lại cho metric RATIO để cấp trên tính lại đúng
+  numeratorSum    Decimal?   @map("numerator_sum") @db.Decimal(18, 2)
+  denominatorSum  Decimal?   @map("denominator_sum") @db.Decimal(18, 2)
+  campaignId      String?    @map("campaign_id")
+
+  kpiDefinition KpiDefinition @relation(fields: [kpiDefinitionId], references: [id], onDelete: Restrict)
+  campaign      Campaign?     @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([ownerType, ownerId, kpiDefinitionId, periodType, periodStart, campaignId])
+  @@index([ownerType, ownerId, periodType, periodStart])
+  @@index([campaignId])
+  @@map("kpi_actuals")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Trọng số KPI
+// ─────────────────────────────────────────────────────────────
+
+/// Nhóm trọng số cho một vị trí hoặc phòng ban. Tổng weight trong nhóm phải = 100%.
+model KpiWeightGroup {
+  id           String  @id @default(cuid())
+  name         String
+  positionId   String? @map("position_id")
+  departmentId String? @map("department_id")
+  effectiveYear Int    @map("effective_year")
+
+  position   Position?   @relation(fields: [positionId], references: [id], onDelete: Cascade)
+  department Department? @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  weights    KpiWeight[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdBy String?  @map("created_by")
+  updatedBy String?  @map("updated_by")
+
+  @@unique([positionId, departmentId, effectiveYear])
+  @@map("kpi_weight_groups")
+}
+
+model KpiWeight {
+  id              String  @id @default(cuid())
+  groupId         String  @map("group_id")
+  kpiDefinitionId String  @map("kpi_definition_id")
+  /// 0.4000 = 40%
+  weight          Decimal @db.Decimal(9, 4)
+
+  group         KpiWeightGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  kpiDefinition KpiDefinition  @relation(fields: [kpiDefinitionId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([groupId, kpiDefinitionId])
+  @@map("kpi_weights")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Campaign
+// ─────────────────────────────────────────────────────────────
+
+model Campaign {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  startDate DateTime @map("start_date") @db.Date
+  endDate   DateTime @map("end_date") @db.Date
+  budget    Decimal? @db.Decimal(18, 2)
+  isActive  Boolean  @default(true) @map("is_active")
+
+  reports  Report[]
+  actuals  KpiActual[]
+  adsRows  AdsInsight[]
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  createdBy String?   @map("created_by")
+  updatedBy String?   @map("updated_by")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([startDate, endDate])
+  @@index([isActive])
+  @@map("campaigns")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Báo cáo & workflow
+// ─────────────────────────────────────────────────────────────
+
+model Report {
+  id           String       @id @default(cuid())
+  authorId     String       @map("author_id")
+  departmentId String       @map("department_id")
+  campaignId   String?      @map("campaign_id")
+  reportDate   DateTime     @map("report_date") @db.Date
+  status       ReportStatus @default(DRAFT)
+  note         String?
+
+  submittedAt DateTime? @map("submitted_at")
+  reviewedAt  DateTime? @map("reviewed_at")
+  reviewerId  String?   @map("reviewer_id")
+  rejectReason String?  @map("reject_reason")
+
+  author     User        @relation("ReportAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+  reviewer   User?       @relation("ReportReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+  department Department  @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  campaign   Campaign?   @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+
+  details     ReportDetail[]
+  attachments Attachment[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdBy String?  @map("created_by")
+  updatedBy String?  @map("updated_by")
+
+  @@unique([authorId, reportDate, campaignId])
+  @@index([departmentId, reportDate, status])
+  @@index([status])
+  @@map("reports")
+}
+
+model ReportDetail {
+  id              String  @id @default(cuid())
+  reportId        String  @map("report_id")
+  kpiDefinitionId String  @map("kpi_definition_id")
+  value           Decimal @db.Decimal(18, 2)
+  /// Số giờ bỏ ra — dùng cho quản lý năng suất (banner/giờ, video/giờ)
+  hoursSpent      Decimal? @map("hours_spent") @db.Decimal(9, 4)
+  note            String?
+
+  report        Report        @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  kpiDefinition KpiDefinition @relation(fields: [kpiDefinitionId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([reportId, kpiDefinitionId])
+  @@map("report_details")
+}
+
+model Attachment {
+  id       String  @id @default(cuid())
+  reportId String  @map("report_id")
+  fileName String  @map("file_name")
+  fileUrl  String  @map("file_url")
+  fileSize Int     @map("file_size")
+  mimeType String  @map("mime_type")
+
+  report Report @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by")
+
+  @@index([reportId])
+  @@map("attachments")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Bảng tổng hợp (materialized) — sinh bởi engine, đọc bởi dashboard
+// ─────────────────────────────────────────────────────────────
+
+model KpiSummary {
+  id          String     @id @default(cuid())
+  ownerType   OwnerType  @map("owner_type")
+  ownerId     String     @map("owner_id")
+  periodType  PeriodType @map("period_type")
+  periodStart DateTime   @map("period_start") @db.Date
+  periodEnd   DateTime   @map("period_end") @db.Date
+
+  /// Điểm KPI có trọng số, 0–120
+  score       Decimal  @db.Decimal(9, 4)
+  grade       String
+  /// Dự báo giá trị cuối kỳ; null khi chưa đủ dữ liệu
+  forecast    Decimal? @db.Decimal(18, 2)
+  confidence  Decimal? @db.Decimal(9, 4)
+  computedAt  DateTime @map("computed_at")
+
+  @@unique([ownerType, ownerId, periodType, periodStart])
+  @@index([periodType, periodStart, score])
+  @@map("kpi_summary")
+}
+
+/// Năng suất & chất lượng: output, giờ làm, outcome quy đổi
+model PerformanceSummary {
+  id          String     @id @default(cuid())
+  ownerType   OwnerType  @map("owner_type")
+  ownerId     String     @map("owner_id")
+  periodType  PeriodType @map("period_type")
+  periodStart DateTime   @map("period_start") @db.Date
+
+  outputCount   Decimal  @map("output_count") @db.Decimal(18, 2)
+  hoursSpent    Decimal  @map("hours_spent") @db.Decimal(18, 2)
+  /// outputCount / hoursSpent, null khi hoursSpent = 0
+  productivity  Decimal? @db.Decimal(18, 4)
+  computedAt    DateTime @map("computed_at")
+
+  @@unique([ownerType, ownerId, periodType, periodStart])
+  @@map("performance_summary")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Tích hợp quảng cáo
+// ─────────────────────────────────────────────────────────────
+
+/// Dữ liệu ads đã chuẩn hoá. Chỉ lưu số nguyên liệu — CTR/CPC/CPA/ROAS do engine tính.
+model AdsInsight {
+  id         String      @id @default(cuid())
+  platform   AdsPlatform
+  accountId  String      @map("account_id")
+  campaignExtId String   @map("campaign_ext_id")
+  adsetExtId String?     @map("adset_ext_id")
+  adExtId    String?     @map("ad_ext_id")
+  /// Đã quy về Asia/Ho_Chi_Minh tại connector
+  date       DateTime    @db.Date
+
+  campaignName String? @map("campaign_name")
+  adsetName    String? @map("adset_name")
+  adName       String? @map("ad_name")
+
+  impressions Int     @default(0)
+  clicks      Int     @default(0)
+  /// Đã quy về VND tại connector
+  spend       Decimal @default(0) @db.Decimal(18, 2)
+  conversions Int     @default(0)
+  leads       Int     @default(0)
+  revenue     Decimal @default(0) @db.Decimal(18, 2)
+  videoViews  Int     @default(0) @map("video_views")
+  frequency   Decimal? @db.Decimal(9, 4)
+
+  campaignId String?   @map("campaign_id")
+  campaign   Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  ownerId    String?   @map("owner_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([platform, accountId, campaignExtId, adsetExtId, adExtId, date])
+  @@index([platform, date])
+  @@index([campaignId, date])
+  @@map("ads_insights")
+}
+
+model AdsSyncLog {
+  id          String      @id @default(cuid())
+  platform    AdsPlatform
+  accountId   String      @map("account_id")
+  rangeStart  DateTime    @map("range_start") @db.Date
+  rangeEnd    DateTime    @map("range_end") @db.Date
+  status      SyncStatus
+  rowCount    Int         @default(0) @map("row_count")
+  errorMessage String?    @map("error_message")
+  startedAt   DateTime    @map("started_at")
+  finishedAt  DateTime?   @map("finished_at")
+
+  @@index([platform, startedAt])
+  @@map("ads_sync_logs")
+}
+
+// ─────────────────────────────────────────────────────────────
+// AI, cảnh báo, thông báo, audit
+// ─────────────────────────────────────────────────────────────
+
+model AiInsight {
+  id          String     @id @default(cuid())
+  ownerType   OwnerType  @map("owner_type")
+  ownerId     String     @map("owner_id")
+  periodType  PeriodType @map("period_type")
+  periodStart DateTime   @map("period_start") @db.Date
+  /// Hash dữ liệu đầu vào — dùng để cache, không gọi lại API khi dữ liệu không đổi
+  dataHash    String     @map("data_hash")
+
+  /// { cause: [...], recommendation: [...], priority, confidence }
+  payload     Json
+  model       String
+  promptVersion String   @map("prompt_version")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([ownerType, ownerId, periodType, periodStart, dataHash])
+  @@index([ownerType, ownerId, periodStart])
+  @@map("ai_insights")
+}
+
+/// Ngưỡng cảnh báo là dữ liệu cấu hình, không hardcode
+model AlertRule {
+  id              String        @id @default(cuid())
+  code            String        @unique
+  name            String
+  kpiDefinitionId String?       @map("kpi_definition_id")
+  severity        AlertSeverity @default(WARNING)
+  /// { operator: "gt"|"lt", threshold: number, consecutiveDays?: number }
+  condition       Json
+  isActive        Boolean       @default(true) @map("is_active")
+
+  alerts Alert[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("alert_rules")
+}
+
+model Alert {
+  id          String        @id @default(cuid())
+  ruleId      String        @map("rule_id")
+  ownerType   OwnerType     @map("owner_type")
+  ownerId     String        @map("owner_id")
+  severity    AlertSeverity
+  message     String
+  evidence    Json
+  triggeredAt DateTime      @map("triggered_at")
+  resolvedAt  DateTime?     @map("resolved_at")
+
+  rule AlertRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@index([ownerType, ownerId, triggeredAt])
+  @@index([resolvedAt])
+  @@map("alerts")
+}
+
+model Notification {
+  id      String  @id @default(cuid())
+  userId  String  @map("user_id")
+  type    String
+  title   String
+  body    String
+  /// Link tới màn hình liên quan
+  linkUrl String? @map("link_url")
+  readAt  DateTime? @map("read_at")
+  /// Khoá chống trùng: không gửi lại cùng thông báo khi tình trạng chưa đổi
+  dedupeKey String @map("dedupe_key")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, dedupeKey])
+  @@index([userId, readAt, createdAt])
+  @@map("notifications")
+}
+
+/// CHỈ APPEND. Không update, không delete — kể cả admin.
+model AuditLog {
+  id         String      @id @default(cuid())
+  actorId    String?     @map("actor_id")
+  action     AuditAction
+  entityType String      @map("entity_type")
+  entityId   String      @map("entity_id")
+  field      String?
+  oldValue   String?     @map("old_value")
+  newValue   String?     @map("new_value")
+  ipAddress  String?     @map("ip_address")
+  userAgent  String?     @map("user_agent")
+
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([entityType, entityId, createdAt])
+  @@index([actorId, createdAt])
+  @@map("audit_log")
+}
