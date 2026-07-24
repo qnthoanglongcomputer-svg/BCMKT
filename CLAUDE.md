@@ -4,6 +4,34 @@ Hệ thống web quản trị KPI & báo cáo phòng Marketing. Đặc tả nghi
 
 ---
 
+## 0. Đọc gì trước khi làm
+
+| Loại việc | Đọc |
+|---|---|
+| Bất kỳ việc gì | File này + [.claude/rules/](.claude/rules/) liên quan |
+| Xây một chức năng | [.claude/workflows/](.claude/workflows/README.md) — mỗi file mô tả một chức năng |
+| Quy trình thực thi | [.claude/skills/](.claude/skills/) — new-feature, db-migration, … |
+| Việc chuyên sâu | Giao cho agent tương ứng trong [.claude/agents/](.claude/agents/) |
+
+**Rules** = quy tắc kỹ thuật luôn đúng. **Workflows** = thiết kế từng chức năng. **Skills** = quy trình làm việc. Ba thứ này không trùng nhau.
+
+Chỉ đọc file liên quan tới việc đang làm. Đọc hết là lãng phí ngữ cảnh.
+
+### Trạng thái hiện tại
+
+| Phần | Trạng thái |
+|---|---|
+| Nền tảng Next.js + Prisma + Vitest | ✅ xong |
+| Schema DB (21 model) + migration `init` | ✅ đã apply lên Supabase |
+| Seed: 6 phòng ban · 13 vị trí · 32 metric · 3 nhóm trọng số · 5 alert rule | ✅ đã chạy |
+| KPI Engine: allocation · rollup · scoring · grading · forecast | ✅ xong, 79 test pass |
+| Dashboard tổng quan (khung + dữ liệu mẫu) | 🚧 đang làm |
+| Auth, phân quyền, workflow báo cáo, ads, AI | ⬜ chưa bắt đầu |
+
+Thứ tự xây dựng tiếp theo: xem [.claude/workflows/README.md](.claude/workflows/README.md).
+
+---
+
 ## 1. Tech stack (đã chốt)
 
 | Lớp | Công nghệ |
@@ -75,19 +103,20 @@ Quy tắc biên: `app/` chỉ orchestrate + render. Toàn bộ logic nghiệp v�
 
 ## 3. Mô hình dữ liệu cốt lõi
 
-Bảng bắt buộc (theo đặc tả mục 24):
-`users`, `roles`, `departments`, `positions`, `campaigns`, `kpi_definitions`, `kpi_year`, `kpi_quarter`, `kpi_month`, `kpi_week`, `kpi_day`, `kpi_weight`, `reports`, `report_details`, `performance_summary`, `kpi_summary`, `notifications`, `audit_log`, `attachments`.
+Schema thật: [prisma/schema.prisma](prisma/schema.prisma) — 21 model, 9 enum, đã deploy.
 
 Nguyên tắc:
 
 - **Cây tổ chức tự mở rộng**: `departments.parent_id` self-reference. Thêm phòng ban / team / vị trí là thao tác dữ liệu, **tuyệt đối không hardcode** tên bộ phận trong code. Chỉ được hardcode `department.code` cho các dashboard chuyên biệt (`PERFORMANCE`, `CONTENT_SOCIAL`, …) và phải tra qua constant tập trung.
-- **KPI đa cấp**: mỗi bản ghi KPI gắn `owner_type` (`COMPANY|DEPARTMENT|TEAM|EMPLOYEE`) + `owner_id` + `kpi_definition_id` + `period`.
-- **Đơn vị thời gian**: `kpi_day` là hạt nhân. Các cấp trên (`week/month/quarter/year`) là bảng vật chất hoá (materialized) để đọc nhanh — luôn sinh lại từ engine, không sửa tay.
+- **KPI đa cấp**: mỗi bản ghi KPI gắn `owner_type` (`COMPANY|DEPARTMENT|TEAM|EMPLOYEE`) + `owner_id` + `kpi_definition_id` + `period_type` + `period_start`.
+- **Đơn vị thời gian**: cấp `DAY` là hạt nhân. Các cấp trên (`WEEK/MONTH/QUARTER/YEAR`) là dữ liệu vật chất hoá để đọc nhanh — luôn sinh lại từ engine, không sửa tay.
 - **Số tiền**: `Decimal(18,2)`. Tỷ lệ/tỷ trọng: `Decimal(9,4)`. **Không dùng `Float`** cho bất kỳ số liệu nghiệp vụ nào.
 - **Soft delete** cho `users`, `departments`, `campaigns` (`deleted_at`). Dữ liệu KPI/report không xoá cứng.
 - Mọi bảng nghiệp vụ có `created_at`, `updated_at`, `created_by`, `updated_by`.
 
-Đổi schema → xem skill `db-migration`. **Luôn hỏi trước khi thay đổi schema đã deploy.**
+**Khác biệt có chủ đích so với đặc tả mục 24**: đặc tả liệt kê `KPI_Year`, `KPI_Month`, `KPI_Week`, `KPI_Day` thành các bảng riêng. Ở đây gộp thành **một bảng `kpi_targets`** phân biệt bằng `period_type`, và một bảng `kpi_actuals` cho số thực tế. Bốn bảng cấu trúc giống hệt nhau chỉ khác độ dài kỳ là trùng lặp, làm mọi truy vấn phải viết 4 lần.
+
+Đổi schema → xem skill [db-migration](.claude/skills/db-migration/SKILL.md). **Luôn hỏi trước khi thay đổi schema đã deploy.**
 
 ---
 
@@ -235,7 +264,42 @@ Không kết luận "đã xong" nếu chưa chạy được các lệnh trên �
 - Không refactor/format file ngoài phạm vi yêu cầu.
 - Tiếng Việt cho toàn bộ nội dung hiển thị cho người dùng và trao đổi với người dùng; tiếng Anh cho tên biến, hàm, bảng, cột.
 
-## 13. Agents & Skills
+## 13. Tài liệu dự án
 
-Agents chuyên trách: `.claude/agents/` — kpi-engine, dashboard-ui, data-integration, ai-insight, workflow-rbac, db-schema.
-Skills quy trình: `.claude/skills/` — new-feature, new-kpi-metric, new-dashboard, db-migration, ads-connector, report-export.
+### [.claude/rules/](.claude/rules/) — quy tắc kỹ thuật, luôn áp dụng
+
+| File | Đọc khi |
+|---|---|
+| [coding-standards.md](.claude/rules/coding-standards.md) | Viết bất kỳ dòng code nào |
+| [data-rules.md](.claude/rules/data-rules.md) | Đụng tới số liệu, Decimal, ngày tháng, rollup |
+| [security-rules.md](.claude/rules/security-rules.md) | Đụng tới quyền, secret, audit, export |
+| [api-rules.md](.claude/rules/api-rules.md) | Viết route handler hoặc server action |
+| [ui-rules.md](.claude/rules/ui-rules.md) | Làm màn hình, biểu đồ, bảng |
+| [testing-rules.md](.claude/rules/testing-rules.md) | Viết test hoặc trước khi báo hoàn thành |
+| [git-rules.md](.claude/rules/git-rules.md) | Commit, branch, migration |
+
+### [.claude/workflows/](.claude/workflows/README.md) — thiết kế từng chức năng
+
+17 file, mỗi file một chức năng: mục tiêu · vai trò · dữ liệu · luồng · màn hình · edge case · tiêu chí hoàn thành · phụ thuộc. Bắt đầu từ [README.md](.claude/workflows/README.md) để biết thứ tự xây dựng.
+
+### [.claude/skills/](.claude/skills/) — quy trình thực thi
+
+`new-feature` · `new-kpi-metric` · `new-dashboard` · `db-migration` · `ads-connector` · `report-export`
+
+### [.claude/agents/](.claude/agents/) — chuyên gia theo miền
+
+`kpi-engine` · `dashboard-ui` · `data-integration` · `ai-insight` · `workflow-rbac` · `db-schema`
+
+---
+
+## 14. Câu hỏi đang chờ người dùng chốt
+
+Ghi lại ở đây để không quyết bừa. Khi làm tới chức năng liên quan, **hỏi trước khi code**.
+
+| # | Câu hỏi | Ảnh hưởng tới |
+|---|---|---|
+| 1 | Metric RATIO (CPA, ROAS, CTR) đặt mục tiêu thế nào? Cố định mỗi kỳ hay có cách khác? | [04 — KPI Planning](.claude/workflows/04-kpi-planning.md) |
+| 2 | Ánh xạ dữ liệu ads → campaign/nhân viên: theo quy ước đặt tên hay bảng ánh xạ thủ công? | [09 — Tích hợp Ads](.claude/workflows/09-tich-hop-ads.md) |
+| 3 | `EMPLOYEE` thấy toàn bộ bảng xếp hạng hay chỉ vị trí của mình? | [12 — Ranking](.claude/workflows/12-ranking-xu-huong.md) |
+| 4 | Quy đổi output→outcome ở cấp campaign hay cấp từng sản phẩm? | [13 — Năng suất](.claude/workflows/13-nang-suat-chat-luong.md) |
+| 5 | Một nhân viên có kiêm nhiệm nhiều vị trí không? (schema hiện chỉ cho 1) | [05 — Trọng số](.claude/workflows/05-kpi-trong-so-cham-diem.md) |

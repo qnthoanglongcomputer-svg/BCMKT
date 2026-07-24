@@ -9,7 +9,8 @@ const compat = new FlatCompat({ baseDirectory: __dirname })
 
 const config = [
   {
-    ignores: ['.next/**', 'node_modules/**', 'src/generated/**'],
+    // next-env.d.ts do Next sinh ra, không sửa được và không tuân quy tắc lint.
+    ignores: ['.next/**', 'node_modules/**', 'src/generated/**', 'next-env.d.ts'],
   },
   ...compat.extends('next/core-web-vitals', 'next/typescript'),
 ]
