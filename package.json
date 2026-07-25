@@ -16,6 +16,7 @@
     "db:studio": "prisma studio",
     "db:seed": "tsx prisma/seed.ts",
     "db:seed-demo": "tsx prisma/seed-demo.ts",
+    "db:seed-ads": "tsx prisma/seed-ads-demo.ts",
     "db:create-user": "tsx prisma/create-user.ts"
   },
   "dependencies": {

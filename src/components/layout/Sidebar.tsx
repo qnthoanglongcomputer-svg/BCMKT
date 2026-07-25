@@ -31,6 +31,7 @@ const NAV_ITEMS: ReadonlyArray<{
   // nhưng nút thêm/sửa bị ẩn theo `scope.canManageKpi`.
   { href: '/kpi', label: 'KPI', icon: '🎯', roles: NOT_EMPLOYEE },
   { href: '/kpi/weights', label: 'Trọng số KPI', icon: '⚖️', roles: KPI_ADMIN },
+  { href: '/ads', label: 'Số liệu quảng cáo', icon: '📣', roles: KPI_ADMIN },
   { href: '/performance', label: 'Performance', icon: '📈', roles: NOT_EMPLOYEE },
   { href: '/content-social', label: 'Content Social', icon: '📱', roles: NOT_EMPLOYEE, disabled: true },
   { href: '/content-creator', label: 'Content Creator', icon: '🎥', roles: NOT_EMPLOYEE, disabled: true },

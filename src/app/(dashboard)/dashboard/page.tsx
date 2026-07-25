@@ -1,10 +1,12 @@
 import { Suspense } from 'react'
 import { getOverview } from '@/server/dashboard/overview'
+import { getChannelDashboard } from '@/server/dashboard/channels'
 import { requireScope } from '@/server/auth/guard'
 import { KpiTile } from '@/components/kpi/KpiTile'
 import { StatusBadge } from '@/components/kpi/StatusBadge'
 import { TrendChart } from '@/components/charts/TrendChart'
 import { DepartmentBar } from '@/components/charts/DepartmentBar'
+import { ChannelDashboard } from '@/components/dashboard/ChannelDashboard'
 import {
   EM_DASH,
   formatDate,
@@ -25,14 +27,36 @@ export default function DashboardPage() {
 }
 
 async function Overview() {
+  let user: Awaited<ReturnType<typeof requireScope>>['user']
+
+  try {
+    const resolved = await requireScope()
+    user = resolved.user
+
+    // Nhân viên chỉ xem KPI cá nhân (đặc tả mục 20) — không xem chi phí/doanh thu
+    // toàn kênh. Các vai trò điều hành thấy dashboard hiệu quả kênh quảng cáo.
+    if (user.role !== 'EMPLOYEE') {
+      const channelData = await getChannelDashboard(new Date())
+      const canManage = user.role === 'ADMIN' || user.role === 'MARKETING_MANAGER'
+      return <ChannelDashboard data={channelData} canManage={canManage} />
+    }
+  } catch (error) {
+    console.error('Không tải được dashboard:', error)
+    return <ErrorState />
+  }
+
+  return <EmployeeOverview />
+}
+
+/** Dashboard KPI cá nhân cho nhân viên. */
+async function EmployeeOverview() {
   let data: Awaited<ReturnType<typeof getOverview>>
 
   try {
-    // Ngày hiện tại lấy ở biên ngoài rồi truyền vào — hàm nghiệp vụ không tự đọc thời gian.
     const { user, scope } = await requireScope()
     data = await getOverview(new Date(), user, scope)
   } catch (error) {
-    console.error('Không tải được dashboard tổng quan:', error)
+    console.error('Không tải được KPI cá nhân:', error)
     return <ErrorState />
   }
 
