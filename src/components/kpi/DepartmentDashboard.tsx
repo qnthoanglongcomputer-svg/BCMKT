@@ -21,7 +21,14 @@ import type { DepartmentDashboardData } from '@/server/dashboard/department'
  * Bố cục và tương tác giống hệt nhau giữa các bộ phận — chỉ khác tập chỉ số,
  * do `DEPARTMENT_METRICS` trong server/dashboard/department.ts quyết định.
  */
-export function DepartmentDashboard({ data }: { data: DepartmentDashboardData }) {
+export function DepartmentDashboard({
+  data,
+  footer,
+}: {
+  data: DepartmentDashboardData
+  /** Nội dung bổ sung chèn ở cuối, ví dụ khối thống kê kênh quảng cáo */
+  footer?: React.ReactNode
+}) {
   const { department, period, groups, trend, trendMetric, score, forecast, hasData } = data
   const headline = groups[0]?.metrics.slice(0, 6) ?? []
 
@@ -46,15 +53,19 @@ export function DepartmentDashboard({ data }: { data: DepartmentDashboardData })
       />
 
       {!hasData ? (
-        <EmptyState
-          title={`Chưa có dữ liệu KPI cho ${department.name}`}
-          description="Bộ phận này chưa có kế hoạch KPI cho kỳ hiện tại. Thiết lập mục tiêu năm để hệ thống sinh mục tiêu xuống từng tháng, tuần và ngày."
-          action={
-            <Link href="/kpi/planning/new" className={buttonClass('primary')}>
-              Thiết lập KPI
-            </Link>
-          }
-        />
+        <div className="space-y-4">
+          <EmptyState
+            title={`Chưa có dữ liệu KPI cho ${department.name}`}
+            description="Bộ phận này chưa có kế hoạch KPI cho kỳ hiện tại. Thiết lập mục tiêu năm để hệ thống sinh mục tiêu xuống từng tháng, tuần và ngày."
+            action={
+              <Link href="/kpi/planning/new" className={buttonClass('primary')}>
+                Thiết lập KPI
+              </Link>
+            }
+          />
+          {/* Thống kê kênh vẫn hiện dù bộ phận chưa có kế hoạch KPI */}
+          {footer}
+        </div>
       ) : (
         <div className="space-y-4">
           {headline.length > 0 ? (
@@ -113,6 +124,8 @@ export function DepartmentDashboard({ data }: { data: DepartmentDashboardData })
               <MetricTable metrics={group.metrics} />
             </Card>
           ))}
+
+          {footer}
         </div>
       )}
     </div>
