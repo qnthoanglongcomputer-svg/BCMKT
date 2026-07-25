@@ -22,13 +22,20 @@ Chỉ đọc file liên quan tới việc đang làm. Đọc hết là lãng ph�
 | Phần | Trạng thái |
 |---|---|
 | Nền tảng Next.js + Prisma + Vitest | ✅ xong |
-| Schema DB (21 model) + migration `init` | ✅ đã apply lên Supabase |
-| Seed: 6 phòng ban · 13 vị trí · 32 metric · 3 nhóm trọng số · 5 alert rule | ✅ đã chạy |
-| KPI Engine: allocation · rollup · scoring · grading · forecast | ✅ xong, 79 test pass |
-| Dashboard tổng quan (khung + dữ liệu mẫu) | 🚧 đang làm |
-| Auth, phân quyền, workflow báo cáo, ads, AI | ⬜ chưa bắt đầu |
+| Schema DB (22 model) + migration `init` + `add_kpi_plan_definition_fk` | ✅ đã apply lên Supabase |
+| Seed nền + seed demo (20 kế hoạch KPI mẫu) | ✅ đã chạy |
+| KPI Engine: allocation · rollup · scoring · grading · forecast | ✅ 184 test pass |
+| Xác thực & phân quyền (01): NextAuth + resolveScope + guard | ✅ xong |
+| Dashboard tổng quan (03) + Dashboard Performance (10) | ✅ đọc dữ liệu thật |
+| KPI Planning (04) + Trọng số (05) | ✅ xong |
+| Nhân sự & tổ chức (02) | ✅ xong |
+| Campaign (08) · Audit log (07) · Export báo cáo (17) | ✅ xong |
+| Thông báo (15) · AI Insight (16) | ✅ xong (AI tự ẩn khi thiếu key) |
+| Workflow báo cáo (06) · Ads (09) · Drill-down (11) · Ranking (12) · Năng suất (13) · Cảnh báo (14) | ⬜ chưa bắt đầu |
 
 Thứ tự xây dựng tiếp theo: xem [.claude/workflows/README.md](.claude/workflows/README.md).
+
+**Tài khoản kiểm thử** (mật khẩu `MatKhau123`): `admin@mpms.vn` · `manager@mpms.vn` · `leader@mpms.vn` (Performance) · `nhanvien@mpms.vn`. Tạo/đổi qua `npm run db:create-user`.
 
 ---
 
