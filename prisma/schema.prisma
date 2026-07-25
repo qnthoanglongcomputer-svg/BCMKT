@@ -529,6 +529,30 @@ model AdsInsight {
   @@map("ads_insights")
 }
 
+/// Mục tiêu quảng cáo theo từng kênh và tháng, dùng để so thực tế với kế hoạch.
+/// Đặt theo tháng; dashboard phân bổ theo ngày khi xem một khoảng con.
+model AdsChannelPlan {
+  id       String      @id @default(cuid())
+  platform AdsPlatform
+  year     Int
+  /// 1–12
+  month    Int
+
+  spendTarget   Decimal @default(0) @map("spend_target") @db.Decimal(18, 2)
+  revenueTarget Decimal @default(0) @map("revenue_target") @db.Decimal(18, 2)
+  leadsTarget   Int     @default(0) @map("leads_target")
+  ordersTarget  Int     @default(0) @map("orders_target")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdBy String?  @map("created_by")
+  updatedBy String?  @map("updated_by")
+
+  @@unique([platform, year, month])
+  @@index([year, month])
+  @@map("ads_channel_plans")
+}
+
 model AdsSyncLog {
   id          String      @id @default(cuid())
   platform    AdsPlatform

@@ -30,6 +30,7 @@ const BUSINESS_ERRORS = new Set([
   'AiInsightError',
   'OrgTreeError',
   'AdsEntryError',
+  'AdsPlanError',
 ])
 
 export function toActionError(error: unknown): string {

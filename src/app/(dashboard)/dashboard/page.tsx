@@ -1,6 +1,7 @@
 import { Suspense } from 'react'
 import { getOverview } from '@/server/dashboard/overview'
 import { getChannelDashboard } from '@/server/dashboard/channels'
+import { resolveDateRange } from '@/server/dashboard/date-range'
 import { requireScope } from '@/server/auth/guard'
 import { KpiTile } from '@/components/kpi/KpiTile'
 import { StatusBadge } from '@/components/kpi/StatusBadge'
@@ -18,15 +19,23 @@ import {
 
 export const dynamic = 'force-dynamic'
 
-export default function DashboardPage() {
+export default function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ preset?: string; from?: string; to?: string }>
+}) {
   return (
     <Suspense fallback={<OverviewSkeleton />}>
-      <Overview />
+      <Overview searchParams={searchParams} />
     </Suspense>
   )
 }
 
-async function Overview() {
+async function Overview({
+  searchParams,
+}: {
+  searchParams: Promise<{ preset?: string; from?: string; to?: string }>
+}) {
   let user: Awaited<ReturnType<typeof requireScope>>['user']
 
   try {
@@ -36,7 +45,9 @@ async function Overview() {
     // Nhân viên chỉ xem KPI cá nhân (đặc tả mục 20) — không xem chi phí/doanh thu
     // toàn kênh. Các vai trò điều hành thấy dashboard hiệu quả kênh quảng cáo.
     if (user.role !== 'EMPLOYEE') {
-      const channelData = await getChannelDashboard(new Date())
+      const params = await searchParams
+      const range = resolveDateRange(params, new Date())
+      const channelData = await getChannelDashboard(range)
       const canManage = user.role === 'ADMIN' || user.role === 'MARKETING_MANAGER'
       return <ChannelDashboard data={channelData} canManage={canManage} />
     }

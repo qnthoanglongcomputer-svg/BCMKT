@@ -48,19 +48,28 @@ async function clean() {
   console.log(`  Đã xoá ${r.count} dòng số liệu quảng cáo mẫu`)
 }
 
+async function cleanPlans() {
+  const r = await prisma.adsChannelPlan.deleteMany({})
+  console.log(`  Đã xoá ${r.count} mục tiêu kênh mẫu`)
+}
+
 async function main() {
   const isClean = process.argv.includes('--clean')
   console.log(isClean ? 'Xoá số liệu ads mẫu' : 'Seed số liệu ads mẫu — bắt đầu')
   await clean()
+  await cleanPlans()
   if (isClean) {
     console.log('Hoàn tất')
     return
   }
 
-  // Từ đầu tháng tới hôm nay.
-  const start = new Date(Date.UTC(TODAY.getUTCFullYear(), TODAY.getUTCMonth(), 1))
+  // Tháng trước (trọn tháng) + tháng này tới hôm nay — để so kỳ có dữ liệu.
+  const prevStart = new Date(Date.UTC(TODAY.getUTCFullYear(), TODAY.getUTCMonth() - 1, 1))
+  const thisStart = new Date(Date.UTC(TODAY.getUTCFullYear(), TODAY.getUTCMonth(), 1))
   const days: Date[] = []
-  for (let d = new Date(start); d <= TODAY; d = new Date(d.getTime() + 86_400_000)) {
+  for (let d = new Date(prevStart); d <= TODAY; d = new Date(d.getTime() + 86_400_000)) {
+    // Bỏ các ngày tương lai của tháng này (sau hôm nay).
+    if (d >= thisStart && d > TODAY) continue
     days.push(new Date(d))
   }
 
@@ -108,7 +117,46 @@ async function main() {
     }
   }
 
-  console.log(`  Số dòng: ${count} (${CHANNELS.length} kênh × ${days.length} ngày)`)
+  console.log(`  Số dòng thực tế: ${count}`)
+
+  // Mục tiêu tháng cho từng kênh ≈ chi phí thực tế cả tháng, đặt cao hơn ~5% để
+  // % đạt chi phí quanh 95% (đang tiêu ít hơn kế hoạch một chút = tốt).
+  let planCount = 0
+  const targetMonth = TODAY.getUTCMonth() + 1
+  const targetYear = TODAY.getUTCFullYear()
+  const daysInTargetMonth = new Date(Date.UTC(targetYear, targetMonth, 0)).getUTCDate()
+
+  for (const ch of CHANNELS) {
+    const monthSpend = new Decimal(ch.dailySpend).times(daysInTargetMonth)
+    // Doanh thu mục tiêu suy từ ROAS trung bình của kênh.
+    const roas = ch.aov / (ch.cpc / (ch.crLead * ch.crOrder))
+    const monthRevenue = monthSpend.times(roas)
+    const monthClicks = monthSpend.dividedBy(ch.cpc)
+    const monthLeads = monthClicks.times(ch.crLead)
+    const monthOrders = monthLeads.times(ch.crOrder)
+
+    await prisma.adsChannelPlan.upsert({
+      where: { platform_year_month: { platform: ch.platform, year: targetYear, month: targetMonth } },
+      update: {
+        spendTarget: monthSpend.times(1.05).toFixed(2),
+        revenueTarget: monthRevenue.times(1.05).toFixed(2),
+        leadsTarget: Math.round(monthLeads.times(1.05).toNumber()),
+        ordersTarget: Math.round(monthOrders.times(1.05).toNumber()),
+      },
+      create: {
+        platform: ch.platform,
+        year: targetYear,
+        month: targetMonth,
+        spendTarget: monthSpend.times(1.05).toFixed(2),
+        revenueTarget: monthRevenue.times(1.05).toFixed(2),
+        leadsTarget: Math.round(monthLeads.times(1.05).toNumber()),
+        ordersTarget: Math.round(monthOrders.times(1.05).toNumber()),
+      },
+    })
+    planCount++
+  }
+
+  console.log(`  Mục tiêu kênh: ${planCount} (tháng ${targetMonth}/${targetYear})`)
   console.log('Seed số liệu ads mẫu — hoàn tất')
 }
 
