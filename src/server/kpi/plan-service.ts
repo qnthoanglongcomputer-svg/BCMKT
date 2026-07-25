@@ -208,6 +208,7 @@ export interface PlanListItem {
   id: string
   year: number
   ownerType: OwnerType
+  ownerId: string
   ownerName: string
   metricCode: string
   metricName: string
@@ -267,6 +268,7 @@ export async function listPlans(year: number, scope: Scope): Promise<PlanListIte
       id: p.id,
       year: p.year,
       ownerType: p.ownerType,
+      ownerId: p.ownerId,
       ownerName: nameById.get(p.ownerId) ?? 'Không xác định',
       metricCode: definition?.code ?? '—',
       metricName: definition?.name ?? 'Chỉ số không còn tồn tại',
