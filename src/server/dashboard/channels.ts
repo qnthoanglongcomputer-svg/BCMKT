@@ -68,6 +68,7 @@ export interface TotalWithComparison {
     leads: number | null
     orders: number | null
     roas: number | null
+    ros: number | null
   }
 }
 
@@ -175,6 +176,7 @@ export async function getChannelDashboard(range: DateRange): Promise<ChannelDash
   const allCurrent = sumTotals([...currentByPlatform.values()])
   const allPrev = sumTotals([...prevByPlatform.values()])
   const totalMetrics = computeChannelMetrics(allCurrent)
+  const prevMetrics = computeChannelMetrics(allPrev)
   const totalSpend = allCurrent.spend
 
   // Mục tiêu tổng = tổng mục tiêu từng kênh, phân bổ theo khoảng.
@@ -205,9 +207,13 @@ export async function getChannelDashboard(range: DateRange): Promise<ChannelDash
       leads: allPrev.leads === 0 ? null : (allCurrent.leads - allPrev.leads) / allPrev.leads,
       orders: allPrev.orders === 0 ? null : (allCurrent.orders - allPrev.orders) / allPrev.orders,
       roas:
-        totalMetrics.roas === null || computeChannelMetrics(allPrev).roas === null
+        totalMetrics.roas === null || prevMetrics.roas === null
           ? null
-          : relativeChange(totalMetrics.roas, computeChannelMetrics(allPrev).roas as Decimal),
+          : relativeChange(totalMetrics.roas, prevMetrics.roas),
+      ros:
+        totalMetrics.ros === null || prevMetrics.ros === null
+          ? null
+          : relativeChange(totalMetrics.ros, prevMetrics.ros),
     },
   }
 

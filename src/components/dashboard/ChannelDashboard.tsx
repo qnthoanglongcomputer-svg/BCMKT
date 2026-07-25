@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { TrendChart } from '@/components/charts/TrendChart'
+import { SpendRevenueChart } from '@/components/charts/SpendRevenueChart'
 import { RangeFilter } from './RangeFilter'
 import { Card, EmptyState, PageHeader, buttonClass } from '@/components/ui/primitives'
 import {
@@ -74,7 +74,7 @@ export function ChannelDashboard({
       ) : (
         <div className="space-y-4">
           <section aria-label="Tổng hợp toàn kênh">
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
               <Tile
                 label="Chi phí"
                 value={formatCurrencyCompact(total.metrics.spend.toString())}
@@ -96,6 +96,13 @@ export function ChannelDashboard({
                 emphasis
               />
               <Tile
+                label="ROS"
+                value={total.metrics.ros === null ? EM_DASH : formatPercent(total.metrics.ros.toNumber())}
+                delta={total.previous.ros}
+                /* ROS = chi phí/doanh thu: giảm là tốt */
+                lowerBetter
+              />
+              <Tile
                 label="Lead"
                 value={formatNumber(total.metrics.leads)}
                 delta={total.previous.leads}
@@ -115,13 +122,13 @@ export function ChannelDashboard({
           </section>
 
           <Card title="Chi phí & doanh thu theo ngày" subtitle="Toàn bộ kênh cộng dồn">
-            <TrendChart
-              data={trend.map((d) => ({ date: d.date, actual: d.spend, target: d.revenue }))}
-              unit="VND"
+            <SpendRevenueChart
+              data={trend.map((d) => ({ date: d.date, spend: d.spend, revenue: d.revenue }))}
               ariaLabel="Biểu đồ chi phí và doanh thu quảng cáo theo ngày"
             />
             <p className="mt-2 text-xs text-slate-400">
-              Đường liền: chi phí · đường nét đứt: doanh thu
+              Chi phí đọc theo trục trái, doanh thu theo trục phải — hai thang riêng để thấy rõ
+              biến động của cả hai.
             </p>
           </Card>
 
@@ -165,6 +172,7 @@ function ChannelTable({ channels }: { channels: ChannelRow[] }) {
             <th scope="col" className="pb-2 text-right font-medium" title="Lead / Click">CR lead</th>
             <th scope="col" className="pb-2 text-right font-medium" title="Đơn / Lead">CR đơn</th>
             <th scope="col" className="pb-2 text-right font-medium">ROAS</th>
+            <th scope="col" className="pb-2 text-right font-medium" title="Chi phí / Doanh thu — càng thấp càng tốt">ROS</th>
           </tr>
         </thead>
         <tbody>
@@ -221,6 +229,9 @@ function ChannelTable({ channels }: { channels: ChannelRow[] }) {
                 </td>
                 <td className="py-2.5 text-right tabular-nums font-medium text-slate-900 dark:text-slate-100">
                   {m.roas === null ? EM_DASH : `${m.roas.toDecimalPlaces(2)}×`}
+                </td>
+                <td className="py-2.5 text-right tabular-nums text-slate-500">
+                  {m.ros === null ? EM_DASH : formatPercent(m.ros.toNumber())}
                 </td>
               </tr>
             )

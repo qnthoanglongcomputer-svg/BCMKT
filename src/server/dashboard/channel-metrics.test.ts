@@ -27,6 +27,7 @@ describe('computeChannelMetrics', () => {
     expect(m.ctr?.toString()).toBe('0.02') // 4000 / 200000
     expect(m.cpa?.toString()).toBe('12500') // 10tr / 800
     expect(m.roas?.toString()).toBe('5') // 50tr / 10tr
+    expect(m.ros?.toString()).toBe('0.2') // 10tr / 50tr = nghịch đảo ROAS
     expect(m.aov?.toString()).toBe('250000') // 50tr / 200
     expect(m.crLead?.toString()).toBe('0.2') // 800 / 4000
     expect(m.crOrder?.toString()).toBe('0.25') // 200 / 800
@@ -52,6 +53,11 @@ describe('computeChannelMetrics', () => {
   it('chi phí bằng 0 thì ROAS là null, không phải vô cực', () => {
     const m = computeChannelMetrics(totals({ revenue: new Decimal('500') }))
     expect(m.roas).toBeNull()
+  })
+
+  it('doanh thu bằng 0 thì ROS là null, không chia cho 0', () => {
+    const m = computeChannelMetrics(totals({ spend: new Decimal('500') }))
+    expect(m.ros).toBeNull()
   })
 
   it('kênh không có dữ liệu trả toàn null cho tỷ lệ, 0 cho số đếm', () => {

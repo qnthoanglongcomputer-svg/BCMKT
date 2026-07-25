@@ -52,8 +52,10 @@ export interface ChannelMetrics {
   ctr: Decimal | null
   /** chi phí / lead */
   cpa: Decimal | null
-  /** doanh thu / chi phí */
+  /** doanh thu / chi phí — càng cao càng tốt */
   roas: Decimal | null
+  /** chi phí / doanh thu — tỷ lệ chi phí trên doanh thu, càng thấp càng tốt */
+  ros: Decimal | null
   /** doanh thu / đơn */
   aov: Decimal | null
   /** Tỷ lệ chuyển đổi lead: lead / click */
@@ -82,6 +84,7 @@ export function computeChannelMetrics(totals: ChannelTotals): ChannelMetrics {
     ctr: ratio(clicks, impressions),
     cpa: ratio(spend, leads),
     roas: ratio(revenue, spend),
+    ros: ratio(spend, revenue),
     aov: ratio(revenue, orders),
     crLead: ratio(leads, clicks),
     crOrder: ratio(orders, leads),
