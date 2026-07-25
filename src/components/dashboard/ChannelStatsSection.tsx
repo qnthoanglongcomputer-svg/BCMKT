@@ -1,8 +1,9 @@
 import Link from 'next/link'
 import { Card } from '@/components/ui/primitives'
+import { AdsMetricChart } from '@/components/charts/AdsMetricChart'
 import { EM_DASH, formatCurrency, formatCurrencyCompact, formatNumber, formatPercent } from '@/lib/format'
 import type { ChannelMetrics } from '@/server/dashboard/channel-metrics'
-import type { ChannelRow } from '@/server/dashboard/channels'
+import type { ChannelRow, ChannelTrendPoint } from '@/server/dashboard/channels'
 
 /**
  * Thống kê đầy đủ các kênh quảng cáo cho dashboard bộ phận Performance.
@@ -15,10 +16,12 @@ import type { ChannelRow } from '@/server/dashboard/channels'
 export function ChannelStatsSection({
   channels,
   total,
+  trend,
   canManage,
 }: {
   channels: ChannelRow[]
   total: ChannelMetrics
+  trend: ChannelTrendPoint[]
   canManage: boolean
 }) {
   const active = channels.filter((c) => !c.metrics.spend.isZero())
@@ -48,11 +51,19 @@ export function ChannelStatsSection({
   })
 
   return (
-    <Card
-      title="Kênh quảng cáo"
-      subtitle={`${activeCount}/${channels.length} kênh đang chạy · tổng chi phí ${formatCurrencyCompact(total.spend.toString())} · ROAS ${total.roas === null ? EM_DASH : `${total.roas.toDecimalPlaces(2)}×`}`}
-    >
-      <div className="overflow-x-auto">
+    <div className="space-y-4">
+      <Card
+        title="Xu hướng quảng cáo theo ngày"
+        subtitle="Chọn chỉ số để xem — mỗi chỉ số có thang đo riêng"
+      >
+        <AdsMetricChart data={trend} ariaLabel="Biểu đồ chỉ số quảng cáo theo ngày" />
+      </Card>
+
+      <Card
+        title="Kênh quảng cáo"
+        subtitle={`${activeCount}/${channels.length} kênh đang chạy · tổng chi phí ${formatCurrencyCompact(total.spend.toString())} · ROAS ${total.roas === null ? EM_DASH : `${total.roas.toDecimalPlaces(2)}×`}`}
+      >
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <caption className="sr-only">Thống kê hiệu quả các kênh quảng cáo</caption>
           <thead>
@@ -131,13 +142,14 @@ export function ChannelStatsSection({
           </tbody>
         </table>
       </div>
-      <p className="mt-3 text-xs text-slate-400">
-        Kênh &ldquo;Dừng&rdquo; là kênh chưa có chi phí trong kỳ. Số liệu quảng cáo nhập tại{' '}
-        <Link href="/ads" className="text-blue-600 hover:underline dark:text-blue-400">
-          Số liệu quảng cáo
-        </Link>
-        .
-      </p>
-    </Card>
+        <p className="mt-3 text-xs text-slate-400">
+          Kênh &ldquo;Dừng&rdquo; là kênh chưa có chi phí trong kỳ. Số liệu quảng cáo nhập tại{' '}
+          <Link href="/ads" className="text-blue-600 hover:underline dark:text-blue-400">
+            Số liệu quảng cáo
+          </Link>
+          .
+        </p>
+      </Card>
+    </div>
   )
 }

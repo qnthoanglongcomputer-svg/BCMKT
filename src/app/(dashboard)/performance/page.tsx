@@ -43,10 +43,11 @@ export default async function PerformancePage() {
   return (
     <DepartmentDashboard
       data={data}
-      footer={
+      afterHeadline={
         <ChannelStatsSection
           channels={channels.channels}
           total={channels.total.metrics}
+          trend={channels.trend}
           canManage={canManage}
         />
       }

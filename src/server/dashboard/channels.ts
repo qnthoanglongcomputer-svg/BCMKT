@@ -55,6 +55,7 @@ export interface ChannelTrendPoint {
   spend: number
   revenue: number
   leads: number
+  clicks: number
 }
 
 /** Chỉ số tổng kèm so sánh, dùng cho hàng tile trên cùng. */
@@ -155,7 +156,7 @@ export async function getChannelDashboard(range: DateRange): Promise<ChannelDash
     prisma.adsInsight.groupBy({
       by: ['date'],
       where: { date: { gte: range.from, lte: range.to } },
-      _sum: { spend: true, revenue: true, leads: true },
+      _sum: { spend: true, revenue: true, leads: true, clicks: true },
       orderBy: { date: 'asc' },
     }),
     prisma.adsChannelPlan.findMany({
@@ -253,7 +254,12 @@ export async function getChannelDashboard(range: DateRange): Promise<ChannelDash
   const spendByDay = new Map(
     byDay.map((r) => [
       r.date.getTime(),
-      { spend: toNumber(r._sum.spend), revenue: toNumber(r._sum.revenue), leads: r._sum.leads ?? 0 },
+      {
+        spend: toNumber(r._sum.spend),
+        revenue: toNumber(r._sum.revenue),
+        leads: r._sum.leads ?? 0,
+        clicks: r._sum.clicks ?? 0,
+      },
     ]),
   )
 
@@ -265,6 +271,7 @@ export async function getChannelDashboard(range: DateRange): Promise<ChannelDash
       spend: row?.spend ?? 0,
       revenue: row?.revenue ?? 0,
       leads: row?.leads ?? 0,
+      clicks: row?.clicks ?? 0,
     })
   }
 

@@ -23,11 +23,11 @@ import type { DepartmentDashboardData } from '@/server/dashboard/department'
  */
 export function DepartmentDashboard({
   data,
-  footer,
+  afterHeadline,
 }: {
   data: DepartmentDashboardData
-  /** Nội dung bổ sung chèn ở cuối, ví dụ khối thống kê kênh quảng cáo */
-  footer?: React.ReactNode
+  /** Nội dung chèn ngay sau hàng KPI tile, trước biểu đồ — ví dụ thống kê kênh quảng cáo */
+  afterHeadline?: React.ReactNode
 }) {
   const { department, period, groups, trend, trendMetric, score, forecast, hasData } = data
   const headline = groups[0]?.metrics.slice(0, 6) ?? []
@@ -64,7 +64,7 @@ export function DepartmentDashboard({
             }
           />
           {/* Thống kê kênh vẫn hiện dù bộ phận chưa có kế hoạch KPI */}
-          {footer}
+          {afterHeadline}
         </div>
       ) : (
         <div className="space-y-4">
@@ -77,6 +77,9 @@ export function DepartmentDashboard({
               </div>
             </section>
           ) : null}
+
+          {/* Ngay sau phần tổng (KPI tile), trước biểu đồ — theo yêu cầu bố cục */}
+          {afterHeadline}
 
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
             <Card
@@ -124,8 +127,6 @@ export function DepartmentDashboard({
               <MetricTable metrics={group.metrics} />
             </Card>
           ))}
-
-          {footer}
         </div>
       )}
     </div>
