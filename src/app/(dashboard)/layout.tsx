@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { UserMenu } from '@/components/layout/UserMenu'
+import { NotificationBell } from '@/components/layout/NotificationBell'
 import { getCurrentUser } from '@/server/auth/guard'
 import { prisma } from '@/lib/prisma'
 
@@ -30,6 +31,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       <Sidebar role={user.role} />
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-12 items-center justify-end gap-3 border-b border-slate-200 bg-white px-4 dark:border-slate-800 dark:bg-slate-900">
+          <NotificationBell userId={user.id} />
           <div className="text-right leading-tight">
             <div className="text-sm text-slate-800 dark:text-slate-200">
               {profile?.fullName ?? 'Người dùng'}

@@ -38,12 +38,12 @@ const NAV_ITEMS: ReadonlyArray<{
   { href: '/editor', label: 'Editor', icon: '🎬', roles: NOT_EMPLOYEE, disabled: true },
   { href: '/trade', label: 'Trade Marketing', icon: '🏪', roles: NOT_EMPLOYEE, disabled: true },
   { href: '/branding', label: 'Branding', icon: '🏷', roles: NOT_EMPLOYEE, disabled: true },
-  { href: '/campaigns', label: 'Campaign', icon: '📊', roles: ALL_ROLES, disabled: true },
-  { href: '/hr', label: 'Nhân sự', icon: '👥', roles: NOT_EMPLOYEE, disabled: true },
-  { href: '/ai-insight', label: 'AI Insight', icon: '🤖', roles: KPI_ADMIN, disabled: true },
-  { href: '/reports', label: 'Báo cáo', icon: '📄', roles: ALL_ROLES, disabled: true },
-  { href: '/notifications', label: 'Thông báo', icon: '🔔', roles: ALL_ROLES, disabled: true },
-  { href: '/admin', label: 'Quản trị', icon: '⚙', roles: ['ADMIN'], disabled: true },
+  { href: '/campaigns', label: 'Campaign', icon: '📊', roles: NOT_EMPLOYEE },
+  { href: '/hr', label: 'Nhân sự', icon: '👥', roles: NOT_EMPLOYEE },
+  { href: '/ai-insight', label: 'AI Insight', icon: '🤖', roles: NOT_EMPLOYEE },
+  { href: '/reports', label: 'Báo cáo', icon: '📄', roles: ALL_ROLES },
+  { href: '/notifications', label: 'Thông báo', icon: '🔔', roles: ALL_ROLES },
+  { href: '/admin', label: 'Quản trị', icon: '⚙', roles: ['ADMIN'] },
 ]
 
 export function Sidebar({ role }: { role: Role }) {
